@@ -11,7 +11,7 @@
       background: #f5f5f5;
     }
     .container {
-      max-width: 900px;
+      max-width: 1000px;
       margin: 0 auto;
       background: #ffffff;
       padding: 20px 24px;
@@ -86,7 +86,7 @@
     .tagline {
       font-size: 0.9rem;
       color: #4b5563;
-      margin-bottom: 16px;
+      margin-bottom: 4px;
     }
     .hint {
       font-size: 0.85rem;
@@ -102,8 +102,15 @@
       color: #1d4ed8;
       margin-left: 4px;
     }
-    .highlight {
-      background: #fef9c3;
+    .round-indicator {
+      font-size: 0.95rem;
+      color: #374151;
+      margin-bottom: 12px;
+    }
+    .history-table {
+      margin-top: 16px;
+      border-top: 2px solid #e5e7eb;
+      padding-top: 8px;
     }
   </style>
 </head>
@@ -114,27 +121,27 @@
       Gib die Preise der Schülergruppen ein – die Anwendung berechnet automatisch
       den Durchschnittspreis, Marktanteilsänderungen und Gewinne.
     </p>
+    <p class="round-indicator">
+      Aktuelle Runde: <span id="round-number">1</span>
+      <span class="badge">Mehrere Runden möglich</span>
+    </p>
 
-    <div class="section-title">1. Aktuelle Marktanteile (Ausgangslage / Start in diese Runde)</div>
-    <div class="grid" id="shares-grid">
-      <!-- Wird per JS gefüllt -->
-    </div>
+    <div class="section-title">1. Marktanteile zu Beginn dieser Runde</div>
+    <div class="grid" id="shares-grid"></div>
     <p class="hint">
       Diese Werte sind die Marktanteile <strong>zu Beginn der Runde</strong>.
-      Nach der Berechnung kannst du die neuen Anteile mit einem Klick übernehmen.
+      Mit „Neue Marktanteile übernehmen“ übernimmst du die Ergebnisse der letzten Runde.
     </p>
 
     <div class="section-title">2. Preise der Unternehmen in dieser Runde</div>
-    <div class="grid" id="prices-grid">
-      <!-- Wird per JS gefüllt -->
-    </div>
+    <div class="grid" id="prices-grid"></div>
     <p class="hint">
       Preise in Euro eingeben, z.B. <code>1,75</code> oder <code>1.75</code>.
-      Kosten je Liter sind intern auf 1,60 € festgelegt.
+      Für jede Runde müssen alle fünf Preise neu eingegeben werden.
     </p>
 
-    <button class="primary" id="run-btn">Simulation starten</button>
-    <button class="secondary" id="apply-btn" disabled>Neue Marktanteile übernehmen</button>
+    <button class="primary" id="run-btn">Simulation für diese Runde starten</button>
+    <button class="secondary" id="apply-btn" disabled>Neue Marktanteile für nächste Runde übernehmen</button>
 
     <div id="results" style="display:none;">
       <div class="section-title">3. Ergebnis dieser Runde</div>
@@ -153,7 +160,7 @@
         <tbody id="changes-body"></tbody>
       </table>
 
-      <h3 class="section-title">Neue Marktanteile und Gewinne</h3>
+      <h3 class="section-title">Neue Marktanteile und Gewinne in dieser Runde</h3>
       <table>
         <thead>
           <tr>
@@ -166,6 +173,26 @@
         </thead>
         <tbody id="shares-body"></tbody>
       </table>
+    </div>
+
+    <div id="history" class="history-table" style="display:none;">
+      <div class="section-title">4. Verlauf aller gespielten Runden</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Runde</th>
+            <th>Unternehmen</th>
+            <th>Preis (€)</th>
+            <th>Marktanteil neu (%)</th>
+            <th>Gewinn gesamt (€)</th>
+          </tr>
+        </thead>
+        <tbody id="history-body"></tbody>
+      </table>
+      <p class="hint">
+        Jeder Klick auf „Simulation starten“ fügt eine neue Zeile für jede Firma hinzu.
+        So können die Schüler:innen den Verlauf der Marktanteile und Gewinne vergleichen.
+      </p>
     </div>
   </div>
 
@@ -180,8 +207,9 @@
     ];
 
     const costPerLiter = 1.60;
-    let currentShares = {}; // Marktanteile zu Beginn der Runde
     let lastNewShares = null;
+    let roundNumber = 1;
+    const roundsHistory = [];
 
     function parseNumber(value) {
       if (!value) return NaN;
@@ -193,7 +221,6 @@
       const pricesGrid = document.getElementById("prices-grid");
       sharesGrid.innerHTML = "";
       pricesGrid.innerHTML = "";
-      currentShares = {};
 
       firms.forEach(firm => {
         // Marktanteile-Eingabe
@@ -207,7 +234,6 @@
         shareWrapper.appendChild(shareLabel);
         shareWrapper.appendChild(shareInput);
         sharesGrid.appendChild(shareWrapper);
-        currentShares[firm.key] = firm.startShare;
 
         // Preis-Eingabe
         const priceWrapper = document.createElement("div");
@@ -221,6 +247,8 @@
         priceWrapper.appendChild(priceInput);
         pricesGrid.appendChild(priceWrapper);
       });
+
+      document.getElementById("round-number").textContent = roundNumber.toString();
     }
 
     function runSimulation() {
@@ -243,7 +271,7 @@
       });
 
       if (!valid) {
-        alert("Bitte gültige Preise und Marktanteile eingeben.");
+        alert("Bitte gültige Preise und Marktanteile eingeben (alle Felder ausfüllen).");
         return;
       }
 
@@ -265,7 +293,6 @@
       const changes = {};
       const newShares = {};
       const profits = {};
-      const liters = {};
 
       firms.forEach(firm => {
         const p = prices[firm.key];
@@ -273,9 +300,7 @@
         const delta = change(p);
         const newShare = oldShare + delta;
 
-        // Begrenzen, optional
         const boundedShare = Math.max(0, Math.min(40, newShare));
-
         const gainPerLiter = p - costPerLiter;
         const litersSold = boundedShare * 10000;
         const profit = gainPerLiter * litersSold;
@@ -287,13 +312,21 @@
         };
         newShares[firm.key] = boundedShare;
         profits[firm.key] = profit;
-        liters[firm.key] = litersSold;
+
+        // Verlauf speichern
+        roundsHistory.push({
+          round: roundNumber,
+          firm: firm.name,
+          price: p,
+          newShare: boundedShare,
+          profit: profit
+        });
       });
 
       lastNewShares = newShares;
       document.getElementById("apply-btn").disabled = false;
 
-      // Ausgabe füllen
+      // Ergebnisse anzeigen
       document.getElementById("avg-price").textContent = avg.toFixed(3).replace(".", ",");
 
       const changesBody = document.getElementById("changes-body");
@@ -348,6 +381,7 @@
       });
 
       document.getElementById("results").style.display = "block";
+      renderHistory();
     }
 
     function applyNewShares() {
@@ -356,7 +390,43 @@
         const input = document.getElementById("share-" + firm.key);
         input.value = lastNewShares[firm.key].toString().replace(".", ",");
       });
+      roundNumber += 1;
+      document.getElementById("round-number").textContent = roundNumber.toString();
       document.getElementById("apply-btn").disabled = true;
+    }
+
+    function renderHistory() {
+      const historyDiv = document.getElementById("history");
+      const historyBody = document.getElementById("history-body");
+      historyBody.innerHTML = "";
+
+      if (roundsHistory.length === 0) {
+        historyDiv.style.display = "none";
+        return;
+      }
+
+      roundsHistory.forEach(entry => {
+        const tr = document.createElement("tr");
+        const tdRound = document.createElement("td");
+        tdRound.textContent = entry.round;
+        const tdFirm = document.createElement("td");
+        tdFirm.textContent = entry.firm;
+        const tdPrice = document.createElement("td");
+        tdPrice.textContent = entry.price.toFixed(3).replace(".", ",");
+        const tdShare = document.createElement("td");
+        tdShare.textContent = entry.newShare.toFixed(1).replace(".", ",");
+        const tdProfit = document.createElement("td");
+        tdProfit.textContent = Math.round(entry.profit).toLocaleString("de-DE");
+
+        tr.appendChild(tdRound);
+        tr.appendChild(tdFirm);
+        tr.appendChild(tdPrice);
+        tr.appendChild(tdShare);
+        tr.appendChild(tdProfit);
+        historyBody.appendChild(tr);
+      });
+
+      historyDiv.style.display = "block";
     }
 
     document.addEventListener("DOMContentLoaded", () => {
@@ -367,4 +437,3 @@
   </script>
 </body>
 </html>
-
