@@ -136,7 +136,7 @@
     <h1>Oligopol-Simulation: Benzinmarkt</h1>
     <p class="tagline">
       Gib die Preise der Schülergruppen ein – die Anwendung berechnet automatisch
-      den Durchschnittspreis, Marktanteilsänderungen und Gewinne.
+      den Durchschnittspreis und die neuen Marktanteile.
     </p>
     <p class="round-indicator">
       Aktuelle Runde: <span id="round-number">1</span>
@@ -177,15 +177,13 @@
         <tbody id="changes-body"></tbody>
       </table>
 
-      <h3 class="section-title">Neue Marktanteile und Gewinne in dieser Runde</h3>
+      <h3 class="section-title">Neue Marktanteile in dieser Runde</h3>
       <table>
         <thead>
           <tr>
             <th>Unternehmen</th>
             <th>Marktanteil alt (%)</th>
             <th>Marktanteil neu (%)</th>
-            <th>Gewinn/Liter (€)</th>
-            <th>Gewinn gesamt (€)</th>
           </tr>
         </thead>
         <tbody id="shares-body"></tbody>
@@ -206,7 +204,6 @@
     // Konfiguration
     const PRICE_MIN = 1.60;
     const PRICE_MAX = 1.90;
-    const costPerLiter = 1.60;
 
     // Firmen und Start-Marktanteile
     const firms = [
@@ -334,7 +331,6 @@
 
       const changes = {};
       const newShares = {};
-      const profits = {};
 
       firms.forEach(firm => {
         const p = prices[firm.key];
@@ -343,9 +339,6 @@
         const newShare = oldShare + delta;
 
         const boundedShare = Math.max(0, Math.min(40, newShare));
-        const gainPerLiter = p - costPerLiter;
-        const litersSold = boundedShare * 10000;
-        const profit = gainPerLiter * litersSold;
 
         changes[firm.key] = {
           price: p,
@@ -353,7 +346,6 @@
           delta: delta
         };
         newShares[firm.key] = boundedShare;
-        profits[firm.key] = profit;
       });
 
       lastNewShares = newShares;
@@ -387,7 +379,7 @@
         trC.appendChild(tdDelta);
         changesBody.appendChild(trC);
 
-        // Zeile neue Marktanteile & Gewinne
+        // Zeile neue Marktanteile
         const trS = document.createElement("tr");
         const tdNameS = document.createElement("td");
         tdNameS.textContent = firm.name;
@@ -398,18 +390,9 @@
         const tdNewShare = document.createElement("td");
         tdNewShare.textContent = newShares[firm.key].toFixed(1).replace(".", ",");
 
-        const gainPerLiter = prices[firm.key] - costPerLiter;
-        const tdGainPerLiter = document.createElement("td");
-        tdGainPerLiter.textContent = gainPerLiter.toFixed(3).replace(".", ",");
-
-        const tdProfit = document.createElement("td");
-        tdProfit.textContent = Math.round(profits[firm.key]).toLocaleString("de-DE");
-
         trS.appendChild(tdNameS);
         trS.appendChild(tdOldShare);
         trS.appendChild(tdNewShare);
-        trS.appendChild(tdGainPerLiter);
-        trS.appendChild(tdProfit);
         sharesBody.appendChild(trS);
       });
 
