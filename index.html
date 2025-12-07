@@ -129,6 +129,11 @@
       height: 12px;
       border-radius: 999px;
     }
+    canvas {
+      border: 1px solid #e5e7eb;
+      margin-bottom: 8px;
+      background: #f9fafb;
+    }
   </style>
 </head>
 <body>
@@ -136,7 +141,7 @@
     <h1>Oligopol-Simulation: Benzinmarkt</h1>
     <p class="tagline">
       Gib die Preise der Schülergruppen ein – die Anwendung berechnet automatisch
-      den Durchschnittspreis und die neuen Marktanteile.
+      den Durchschnittspreis und die neuen Marktanteile. Gewinne berechnet ihr selbst.
     </p>
     <p class="round-indicator">
       Aktuelle Runde: <span id="round-number">1</span>
@@ -158,7 +163,9 @@
     </p>
 
     <button class="primary" id="run-btn">Simulation für diese Runde starten</button>
-    <button class="secondary" id="apply-btn" disabled>Neue Marktanteile für nächste Runde übernehmen</button>
+    <button class="secondary" id="apply-btn" disabled>
+      Neue Marktanteile für nächste Runde übernehmen
+    </button>
 
     <div id="results" style="display:none;">
       <div class="section-title">3. Ergebnis dieser Runde</div>
@@ -177,13 +184,14 @@
         <tbody id="changes-body"></tbody>
       </table>
 
-      <h3 class="section-title">Neue Marktanteile in dieser Runde</h3>
+      <h3 class="section-title">Neue Marktanteile und Absatzmengen</h3>
       <table>
         <thead>
           <tr>
             <th>Unternehmen</th>
             <th>Marktanteil alt (%)</th>
             <th>Marktanteil neu (%)</th>
+            <th>Absatzmenge neu (Liter)</th>
           </tr>
         </thead>
         <tbody id="shares-body"></tbody>
@@ -193,9 +201,13 @@
     <div id="history" class="history-container" style="display:none;">
       <div class="section-title">4. Verlauf der Marktanteile (Grafik)</div>
       <div class="legend" id="legend"></div>
-      <canvas id="historyChart" width="900" height="350"></canvas>
+      <canvas id="historyChart" width="900" height="300"></canvas>
+
+      <div class="section-title">5. Verlauf der Preise (Grafik)</div>
+      <canvas id="priceChart" width="900" height="300"></canvas>
+
       <p class="hint">
-        Die Linien zeigen, wie sich die Marktanteile der Unternehmen über die Runden entwickeln.
+        Oben: Entwicklung der Marktanteile. Unten: Entwicklung der Preise je Unternehmen über die Runden.
       </p>
     </div>
   </div>
@@ -204,6 +216,7 @@
     // Konfiguration
     const PRICE_MIN = 1.60;
     const PRICE_MAX = 1.90;
+    const LITERS_PER_PERCENT = 10000;
 
     // Firmen und Start-Marktanteile
     const firms = [
@@ -216,7 +229,9 @@
 
     let lastNewShares = null;
     let roundNumber = 1;
-    // history: [{ round: 1, shares: { aral: 20, shell: 19, ... } }, ...]
+
+    // Verlauf: pro Runde Marktanteile und Preise
+    // roundsHistory[i] = { round, shares: {aral: ..}, prices: {aral: ..} }
     const roundsHistory = [];
 
     function parseNumber(value) {
@@ -308,9 +323,11 @@
       }
 
       if (priceError) {
-        alert("Mindestens ein Preis liegt außerhalb der erlaubten Spanne von "
-          + PRICE_MIN.toFixed(2).replace(".", ",") + " € bis "
-          + PRICE_MAX.toFixed(2).replace(".", ",") + " €.");
+        alert(
+          "Mindestens ein Preis liegt außerhalb der erlaubten Spanne von " +
+          PRICE_MIN.toFixed(2).replace(".", ",") + " € bis " +
+          PRICE_MAX.toFixed(2).replace(".", ",") + " €."
+        );
         return;
       }
 
@@ -318,7 +335,7 @@
       const avg =
         Object.values(prices).reduce((sum, val) => sum + val, 0) / firms.length;
 
-      // Funktion für Marktanteilsänderung auf Basis des Preisabstands
+      // Marktanteilsänderung abhängig vom Preisabstand
       function change(price) {
         const diffCents = (avg - price) * 100; // in Cent
         if (diffCents >= 6) return 3;
@@ -337,9 +354,7 @@
         const oldShare = shares[firm.key];
         const delta = change(p);
         const newShare = oldShare + delta;
-
         const boundedShare = Math.max(0, Math.min(40, newShare));
-
         changes[firm.key] = {
           price: p,
           diffCents: (avg - p) * 100,
@@ -352,7 +367,8 @@
       document.getElementById("apply-btn").disabled = false;
 
       // Ergebnisse anzeigen
-      document.getElementById("avg-price").textContent = avg.toFixed(3).replace(".", ",");
+      document.getElementById("avg-price").textContent =
+        avg.toFixed(3).replace(".", ",");
 
       const changesBody = document.getElementById("changes-body");
       const sharesBody = document.getElementById("shares-body");
@@ -362,7 +378,7 @@
       firms.forEach(firm => {
         const c = changes[firm.key];
 
-        // Zeile Marktanteilsänderung
+        // Tabelle: Marktanteilsänderungen
         const trC = document.createElement("tr");
         const tdNameC = document.createElement("td");
         tdNameC.textContent = firm.name;
@@ -379,7 +395,7 @@
         trC.appendChild(tdDelta);
         changesBody.appendChild(trC);
 
-        // Zeile neue Marktanteile
+        // Tabelle: neue Marktanteile & Absatzmengen
         const trS = document.createElement("tr");
         const tdNameS = document.createElement("td");
         tdNameS.textContent = firm.name;
@@ -390,38 +406,50 @@
         const tdNewShare = document.createElement("td");
         tdNewShare.textContent = newShares[firm.key].toFixed(1).replace(".", ",");
 
+        const tdLiters = document.createElement("td");
+        const liters = newShares[firm.key] * LITERS_PER_PERCENT;
+        tdLiters.textContent = Math.round(liters).toLocaleString("de-DE");
+
         trS.appendChild(tdNameS);
         trS.appendChild(tdOldShare);
         trS.appendChild(tdNewShare);
+        trS.appendChild(tdLiters);
         sharesBody.appendChild(trS);
       });
 
       document.getElementById("results").style.display = "block";
 
       // Verlauf speichern
-      const roundEntry = { round: roundNumber, shares: {} };
+      const roundEntry = { round: roundNumber, shares: {}, prices: {} };
       firms.forEach(firm => {
         roundEntry.shares[firm.key] = newShares[firm.key];
+        roundEntry.prices[firm.key] = prices[firm.key];
       });
       roundsHistory.push(roundEntry);
       renderHistory();
     }
 
     function applyNewShares() {
-      if (!lastNewShares) return;
+      if (!lastNewShares) {
+        alert("Bitte zuerst eine Runde simulieren.");
+        return;
+      }
       firms.forEach(firm => {
         const input = document.getElementById("share-" + firm.key);
         input.value = lastNewShares[firm.key].toString().replace(".", ",");
       });
       roundNumber += 1;
-      document.getElementById("round-number").textContent = roundNumber.toString();
+      document.getElementById("round-number").textContent =
+        roundNumber.toString();
       document.getElementById("apply-btn").disabled = true;
     }
 
     function renderHistory() {
       const historyDiv = document.getElementById("history");
-      const canvas = document.getElementById("historyChart");
-      const ctx = canvas.getContext("2d");
+      const sharesCanvas = document.getElementById("historyChart");
+      const pricesCanvas = document.getElementById("priceChart");
+      const sharesCtx = sharesCanvas.getContext("2d");
+      const pricesCtx = pricesCanvas.getContext("2d");
 
       if (roundsHistory.length === 0) {
         historyDiv.style.display = "none";
@@ -429,79 +457,194 @@
       }
       historyDiv.style.display = "block";
 
-      const width = canvas.width;
-      const height = canvas.height;
-      ctx.clearRect(0, 0, width, height);
-
+      // Gemeinsame Hilfen
       const margin = { left: 50, right: 20, top: 20, bottom: 40 };
-      const plotWidth = width - margin.left - margin.right;
-      const plotHeight = height - margin.top - margin.bottom;
 
       const rounds = roundsHistory.map(r => r.round);
       const maxRound = Math.max(...rounds);
       const minRound = Math.min(...rounds);
 
-      // y-Skala: Marktanteile
-      const yMin = 0;
-      const yMax = 40; // Obergrenze wie im Modell
-
-      // Achsen zeichnen
-      ctx.strokeStyle = "#9ca3af";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      // y-Achse
-      ctx.moveTo(margin.left, margin.top);
-      ctx.lineTo(margin.left, margin.top + plotHeight);
-      // x-Achse
-      ctx.lineTo(margin.left + plotWidth, margin.top + plotHeight);
-      ctx.stroke();
-
-      ctx.fillStyle = "#374151";
-      ctx.font = "10px system-ui";
-
-      // y-Skala beschriften (alle 10 %-Punkte)
-      for (let y = 0; y <= yMax; y += 10) {
-        const yPos = margin.top + plotHeight - (y - yMin) / (yMax - yMin) * plotHeight;
-        ctx.beginPath();
-        ctx.moveTo(margin.left - 4, yPos);
-        ctx.lineTo(margin.left, yPos);
-        ctx.stroke();
-        ctx.fillText(y.toString(), 10, yPos + 3);
+      function xPosForRound(round, width) {
+        const plotWidth = width - margin.left - margin.right;
+        const denom = Math.max(1, maxRound - minRound);
+        return margin.left + (round - minRound) / denom * plotWidth;
       }
 
-      // x-Skala (Runden)
-      for (let r = minRound; r <= maxRound; r++) {
-        const xPos = margin.left + (r - minRound) / Math.max(1, (maxRound - minRound)) * plotWidth;
-        ctx.beginPath();
-        ctx.moveTo(xPos, margin.top + plotHeight);
-        ctx.lineTo(xPos, margin.top + plotHeight + 4);
-        ctx.stroke();
-        ctx.fillText("R" + r, xPos - 8, margin.top + plotHeight + 16);
-      }
+      // ---- Diagramm Marktanteile ----
+      {
+        const width = sharesCanvas.width;
+        const height = sharesCanvas.height;
+        sharesCtx.clearRect(0, 0, width, height);
+        const plotWidth = width - margin.left - margin.right;
+        const plotHeight = height - margin.top - margin.bottom;
 
-      // Linien je Firma zeichnen
-      firms.forEach(firm => {
-        ctx.beginPath();
-        let firstPoint = true;
-        ctx.strokeStyle = firm.color;
-        ctx.lineWidth = 2;
+        const yMin = 0;
+        const yMax = 40;
 
-        roundsHistory.forEach(entry => {
-          const r = entry.round;
-          const share = entry.shares[firm.key];
-          if (share === undefined) return;
-          const xPos = margin.left + (r - minRound) / Math.max(1, (maxRound - minRound)) * plotWidth;
-          const yPos = margin.top + plotHeight - (share - yMin) / (yMax - yMin) * plotHeight;
-          if (firstPoint) {
-            ctx.moveTo(xPos, yPos);
-            firstPoint = false;
-          } else {
-            ctx.lineTo(xPos, yPos);
+        function yPosForShare(share) {
+          return margin.top + plotHeight - (share - yMin) / (yMax - yMin) * plotHeight;
+        }
+
+        // Achsen
+        sharesCtx.strokeStyle = "#9ca3af";
+        sharesCtx.lineWidth = 1;
+        sharesCtx.beginPath();
+        sharesCtx.moveTo(margin.left, margin.top);
+        sharesCtx.lineTo(margin.left, margin.top + plotHeight);
+        sharesCtx.lineTo(margin.left + plotWidth, margin.top + plotHeight);
+        sharesCtx.stroke();
+
+        sharesCtx.fillStyle = "#374151";
+        sharesCtx.font = "10px system-ui";
+
+        // y-Ticks
+        for (let y = 0; y <= yMax; y += 10) {
+          const yPos = yPosForShare(y);
+          sharesCtx.beginPath();
+          sharesCtx.moveTo(margin.left - 4, yPos);
+          sharesCtx.lineTo(margin.left, yPos);
+          sharesCtx.stroke();
+          sharesCtx.fillText(y.toString(), 10, yPos + 3);
+        }
+
+        // x-Ticks (Runden)
+        for (let r = minRound; r <= maxRound; r++) {
+          const xPos = xPosForRound(r, width);
+          sharesCtx.beginPath();
+          sharesCtx.moveTo(xPos, margin.top + plotHeight);
+          sharesCtx.lineTo(xPos, margin.top + plotHeight + 4);
+          sharesCtx.stroke();
+          sharesCtx.fillText("R" + r, xPos - 8, margin.top + plotHeight + 16);
+        }
+
+        // Linien & Punkte pro Firma
+        firms.forEach(firm => {
+          // Linie
+          sharesCtx.beginPath();
+          let hasPoint = false;
+          sharesCtx.strokeStyle = firm.color;
+          sharesCtx.lineWidth = 2;
+
+          roundsHistory.forEach(entry => {
+            const r = entry.round;
+            const share = entry.shares[firm.key];
+            if (share === undefined) return;
+            const x = xPosForRound(r, width);
+            const y = yPosForShare(share);
+            if (!hasPoint) {
+              sharesCtx.moveTo(x, y);
+              hasPoint = true;
+            } else {
+              sharesCtx.lineTo(x, y);
+            }
+          });
+
+          if (hasPoint && roundsHistory.length > 1) {
+            sharesCtx.stroke();
           }
-        });
 
-        ctx.stroke();
-      });
+          // Punkte
+          sharesCtx.fillStyle = firm.color;
+          roundsHistory.forEach(entry => {
+            const r = entry.round;
+            const share = entry.shares[firm.key];
+            if (share === undefined) return;
+            const x = xPosForRound(r, width);
+            const y = yPosForShare(share);
+            sharesCtx.beginPath();
+            sharesCtx.arc(x, y, 4, 0, 2 * Math.PI);
+            sharesCtx.fill();
+          });
+        });
+      }
+
+      // ---- Diagramm Preise ----
+      {
+        const width = pricesCanvas.width;
+        const height = pricesCanvas.height;
+        pricesCtx.clearRect(0, 0, width, height);
+        const plotWidth = width - margin.left - margin.right;
+        const plotHeight = height - margin.top - margin.bottom;
+
+        const yMin = PRICE_MIN - 0.02;
+        const yMax = PRICE_MAX + 0.02;
+
+        function yPosForPrice(price) {
+          return margin.top + plotHeight - (price - yMin) / (yMax - yMin) * plotHeight;
+        }
+
+        // Achsen
+        pricesCtx.strokeStyle = "#9ca3af";
+        pricesCtx.lineWidth = 1;
+        pricesCtx.beginPath();
+        pricesCtx.moveTo(margin.left, margin.top);
+        pricesCtx.lineTo(margin.left, margin.top + plotHeight);
+        pricesCtx.lineTo(margin.left + plotWidth, margin.top + plotHeight);
+        pricesCtx.stroke();
+
+        pricesCtx.fillStyle = "#374151";
+        pricesCtx.font = "10px system-ui";
+
+        // y-Ticks (Preise z.B. in 0,05-Schritten)
+        const step = 0.05;
+        for (let p = Math.ceil(yMin / step) * step; p <= yMax; p += step) {
+          const yPos = yPosForPrice(p);
+          pricesCtx.beginPath();
+          pricesCtx.moveTo(margin.left - 4, yPos);
+          pricesCtx.lineTo(margin.left, yPos);
+          pricesCtx.stroke();
+          pricesCtx.fillText(p.toFixed(2).replace(".", ","), 5, yPos + 3);
+        }
+
+        // x-Ticks (Runden)
+        for (let r = minRound; r <= maxRound; r++) {
+          const xPos = xPosForRound(r, width);
+          pricesCtx.beginPath();
+          pricesCtx.moveTo(xPos, margin.top + plotHeight);
+          pricesCtx.lineTo(xPos, margin.top + plotHeight + 4);
+          pricesCtx.stroke();
+          pricesCtx.fillText("R" + r, xPos - 8, margin.top + plotHeight + 16);
+        }
+
+        // Linien & Punkte pro Firma
+        firms.forEach(firm => {
+          pricesCtx.beginPath();
+          let hasPoint = false;
+          pricesCtx.strokeStyle = firm.color;
+          pricesCtx.lineWidth = 2;
+
+          roundsHistory.forEach(entry => {
+            const r = entry.round;
+            const price = entry.prices[firm.key];
+            if (price === undefined) return;
+            const x = xPosForRound(r, width);
+            const y = yPosForPrice(price);
+            if (!hasPoint) {
+              pricesCtx.moveTo(x, y);
+              hasPoint = true;
+            } else {
+              pricesCtx.lineTo(x, y);
+            }
+          });
+
+          if (hasPoint && roundsHistory.length > 1) {
+            pricesCtx.stroke();
+          }
+
+          // Punkte
+          pricesCtx.fillStyle = firm.color;
+          roundsHistory.forEach(entry => {
+            const r = entry.round;
+            const price = entry.prices[firm.key];
+            if (price === undefined) return;
+            const x = xPosForRound(r, width);
+            const y = yPosForPrice(price);
+            pricesCtx.beginPath();
+            pricesCtx.arc(x, y, 4, 0, 2 * Math.PI);
+            pricesCtx.fill();
+          });
+        });
+      }
     }
 
     document.addEventListener("DOMContentLoaded", () => {
